@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理部DXダッシュボード | ワイズグループ</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<!-- Firebase compat SDK (SRI検証付き) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"
+  integrity="sha384-ViccRjS0k/lvYsrtaKXk+ES61/4PAZlFI/mPHmLC1YWzK0AIbXbI5ZXDzcm3F8gH"
+  crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"
+  integrity="sha384-+/4lqMnmLqwbdHXshvGDmBTeWlNoPRdjXi4ZsiBj10EhQXaTBe3RF5JZktdSjug6"
+  crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"
+  integrity="sha384-7TetnPNdXXu6qURzIEXWCwpXedGGBJSXIR5Cv0gOWTB34UD5TxPHx33PhjA6wFQ3"
+  crossorigin="anonymous"></script>
+<style>
+/* ── WISE Group Design System ─────────────────────────────── */
+:root {
+  --color-primary:    #3b82f6;
+  --color-secondary:  #6366f1;
+  --color-accent:     #06b6d4;
+  --color-bg:         #f8fafc;
+  --color-surface:    #ffffff;
+  --color-text:       #1e293b;
+  --color-text-sub:   #64748b;
+  --color-border:     #e2e8f0;
+  --font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', sans-serif;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-base: 1rem;
+  --text-lg: 1.125rem; --text-xl: 1.25rem; --text-2xl: 1.5rem; --text-3xl: 1.875rem;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-6: 24px; --space-8: 32px;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-full: 9999px;
+  --sem-ok-text: #15803d; --sem-ok-bg: #dcfce7; --sem-ok-border: #86efac;
+  --sem-warn-text: #b45309; --sem-warn-bg: #fef3c7; --sem-warn-border: #f0d48a;
+  --sem-err-text: #b91c1c; --sem-err-bg: #fee2e2;
+  --sem-info-text: #1d4ed8; --sem-info-bg: #dbeafe;
+  --sem-purple-text: #6d28d9; --sem-purple-bg: #ede9fe;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-family); background: var(--color-bg); color: var(--color-text); line-height: 1.7; font-size: var(--text-base); }
+:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }
+.hidden { display: none !important; }
+
+/* ── 認証オーバーレイ ───────────────────────────────────── */
+#auth-overlay {
+  position: fixed; inset: 0; background: var(--color-bg);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+#auth-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg); padding: 40px; text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,.12); max-width: 400px; width: 90%;
+}
+#auth-card .logo { font-size: 2.8rem; margin-bottom: var(--space-3); }
+#auth-card h2 { font-size: var(--text-xl); margin-bottom: var(--space-2); }
+#auth-card p { color: var(--color-text-sub); font-size: var(--text-sm); margin-bottom: var(--space-6); line-height: 1.6; }
+#login-btn {
+  background: var(--color-primary); color: #fff; border: none;
+  border-radius: var(--radius-sm); padding: 12px 28px; font-size: var(--text-base);
+  font-weight: 700; cursor: pointer; font-family: var(--font-family); width: 100%;
+}
+#login-btn:hover { filter: brightness(0.9); }
+#auth-status { margin-top: var(--space-4); font-size: var(--text-sm); color: var(--color-text-sub); min-height: 1.4em; }
+
+/* ── ヘッダー ─────────────────────────────────────────────── */
+header {
+  background: var(--color-primary); color: #fff;
+  padding: var(--space-4) var(--space-6);
+  display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 200;
+}
+header h1 { font-size: var(--text-xl); font-weight: 700; margin: 0; }
+.header-meta { color: rgba(255,255,255,.8); font-size: var(--text-sm); }
+.header-spacer { flex: 1; }
+.header-btn {
+  background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.4); color: #fff;
+  padding: 5px 14px; border-radius: var(--radius-full); font-size: var(--text-sm);
+  cursor: pointer; font-family: var(--font-family); transition: background .15s;
+}
+.header-btn:hover { background: rgba(255,255,255,.28); }
+.countdown-badge {
+  background: #fef3c7; color: #b45309; border: 2px solid #fcd34d;
+  padding: 5px 16px; border-radius: var(--radius-full); font-size: var(--text-sm); font-weight: 700;
+}
+
+/* ── タブバー ─────────────────────────────────────────────── */
+.tab-bar {
+  background: var(--color-surface); border-bottom: 2px solid var(--color-border);
+  padding: 0 var(--space-6); display: flex; gap: 0; overflow-x: auto;
+}
+.tab-btn {
+  padding: 12px 20px; cursor: pointer; border: none; background: none;
+  border-bottom: 3px solid transparent; font-weight: 600; font-size: var(--text-sm);
+  color: var(--color-text-sub); font-family: var(--font-family);
+  white-space: nowrap; transition: all .15s;
+}
+.tab-btn:hover { color: var(--color-primary); }
+.tab-btn.active { border-bottom-color: var(--color-primary); color: var(--color-primary); }
+
+/* ── メインコンテンツ ─────────────────────────────────────── */
+main { max-width: 1280px; margin: 0 auto; padding: var(--space-6) var(--space-6) 80px; }
+
+/* ── サマリーカード群 ─────────────────────────────────────── */
+.summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4); margin-bottom: var(--space-6);
+}
+.summary-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: var(--space-4) var(--space-6);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.summary-card .label { font-size: var(--text-sm); color: var(--color-text-sub); margin-bottom: var(--space-1); }
+.summary-card .value { font-size: var(--text-3xl); font-weight: 700; }
+.summary-card .sub { font-size: var(--text-sm); color: var(--color-text-sub); margin-top: var(--space-1); }
+
+/* ── 全体進捗バー ─────────────────────────────────────────── */
+.progress-section {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-6); box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.progress-section h2 { font-size: var(--text-lg); margin-bottom: var(--space-4); }
+.progress-bar-wrap { margin-bottom: var(--space-4); }
+.progress-bar-wrap .bar-label { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-text-sub); margin-bottom: var(--space-1); }
+.bar-bg { background: var(--color-border); border-radius: var(--radius-full); height: 12px; overflow: hidden; }
+.bar-fg { height: 100%; border-radius: var(--radius-full); background: var(--color-primary); transition: width .6s ease; }
+.bar-fg.cluster-a { background: #10b981; }
+.bar-fg.cluster-b { background: #f59e0b; }
+.bar-fg.cluster-c { background: var(--color-secondary); }
+
+/* ── マイルストーンタイムライン ──────────────────────────── */
+.milestone-section {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-6); box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.milestone-section h2 { font-size: var(--text-lg); margin-bottom: var(--space-4); }
+.timeline { display: flex; gap: 0; overflow-x: auto; padding-bottom: var(--space-2); }
+.milestone-item {
+  flex: 1 0 160px; padding: var(--space-3) var(--space-4); border-left: 3px solid var(--color-border);
+  position: relative;
+}
+.milestone-item.today { border-left-color: var(--color-primary); background: var(--sem-info-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.milestone-item.past { border-left-color: var(--sem-ok-border); }
+.milestone-item.past .ms-title { color: var(--sem-ok-text); }
+.milestone-item .ms-date { font-size: var(--text-xs); color: var(--color-text-sub); font-weight: 700; }
+.milestone-item .ms-title { font-size: var(--text-sm); font-weight: 600; margin-top: 4px; line-height: 1.4; }
+.milestone-item .ms-note { font-size: var(--text-xs); color: var(--color-text-sub); margin-top: 4px; }
+.today-marker { font-size: var(--text-xs); background: var(--color-primary); color: #fff; padding: 1px 8px; border-radius: var(--radius-full); display: inline-block; margin-bottom: 4px; }
+
+/* ── フィルタバー ─────────────────────────────────────────── */
+.filter-bar {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4); display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+}
+.filter-bar .filter-label { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-sub); margin-right: var(--space-2); }
+.chip {
+  border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text);
+  padding: 6px 14px; border-radius: var(--radius-full); font-size: var(--text-sm); font-weight: 600;
+  cursor: pointer; font-family: var(--font-family); transition: all .2s;
+}
+.chip:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.chip.on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.search-input {
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 6px 12px; font-size: var(--text-sm); font-family: var(--font-family);
+  flex: 1; min-width: 180px; max-width: 320px;
+}
+.search-input:focus { outline: 2px solid var(--color-primary); }
+
+/* ── テーブル ─────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+table { width: 100%; border-collapse: collapse; background: var(--color-surface); font-size: var(--text-sm); }
+th {
+  background: var(--color-primary); color: #fff; text-align: left;
+  padding: var(--space-3) var(--space-4); font-size: var(--text-sm); font-weight: 600;
+  white-space: nowrap; position: sticky; top: 0; z-index: 10;
+}
+td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--color-bg); }
+td.task-title { font-weight: 600; max-width: 260px; word-break: break-all; }
+td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break-all; font-size: var(--text-xs); }
+
+/* ── バッジ ───────────────────────────────────────────────── */
+.badge {
+  display: inline-block; font-size: var(--text-xs); padding: 3px 10px;
+  border-radius: var(--radius-full); font-weight: 700; white-space: nowrap;
+}
+.badge.done      { background: var(--sem-ok-bg); color: var(--sem-ok-text); }
+.badge.parallel  { background: var(--sem-info-bg); color: var(--sem-info-text); }
+.badge.dev       { background: var(--sem-purple-bg); color: var(--sem-purple-text); }
+.badge.none      { background: var(--color-border); color: var(--color-text-sub); }
+.badge.external  { background: #fce7f3; color: #9d174d; }
+.badge.cluster-a { background: #d1fae5; color: #065f46; }
+.badge.cluster-b { background: #fef3c7; color: #92400e; }
+.badge.cluster-c { background: var(--sem-purple-bg); color: var(--sem-purple-text); }
+
+/* ── ステータスセレクト ───────────────────────────────────── */
+.status-select {
+  font-size: var(--text-xs); border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); padding: 3px 6px; font-family: var(--font-family);
+  background: var(--color-surface); cursor: pointer;
+}
+.status-select:focus { outline: 2px solid var(--color-primary); }
+.status-saving { opacity: 0.5; pointer-events: none; }
+
+/* ── チェックリスト ───────────────────────────────────────── */
+.checklist-section { margin-bottom: var(--space-6); }
+.checklist-section h2 { font-size: var(--text-lg); margin-bottom: var(--space-4); }
+.checklist-group {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); margin-bottom: var(--space-4); overflow: hidden;
+}
+.checklist-group-header {
+  background: var(--color-bg); padding: var(--space-3) var(--space-4);
+  font-weight: 700; font-size: var(--text-sm); border-bottom: 1px solid var(--color-border);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.checklist-item {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border);
+  cursor: pointer; transition: background .15s;
+}
+.checklist-item:last-child { border-bottom: none; }
+.checklist-item:hover { background: var(--color-bg); }
+.checklist-item input[type="checkbox"] { margin-top: 3px; cursor: pointer; accent-color: var(--color-primary); width: 16px; height: 16px; flex-shrink: 0; }
+.checklist-item .item-text { font-size: var(--text-sm); line-height: 1.6; }
+.checklist-item.checked .item-text { text-decoration: line-through; color: var(--color-text-sub); }
+.checklist-item .item-num { font-size: var(--text-xs); color: var(--color-text-sub); min-width: 24px; font-weight: 700; }
+.checklist-item .item-updater { font-size: var(--text-xs); color: var(--color-text-sub); margin-left: auto; white-space: nowrap; }
+
+/* ── 権限管理モーダル ─────────────────────────────────────── */
+#admin-modal {
+  position: fixed; inset: 0; background: rgba(30,41,59,.5);
+  display: none; align-items: center; justify-content: center; z-index: 8000;
+}
+#admin-modal.open { display: flex; }
+#admin-inner {
+  background: var(--color-surface); border-radius: var(--radius-lg);
+  padding: var(--space-6); width: min(500px, 94vw);
+  box-shadow: 0 8px 32px rgba(0,0,0,.18); max-height: 80vh; overflow-y: auto;
+}
+#admin-inner h3 { margin: 0 0 var(--space-4); font-size: var(--text-lg); }
+.admin-user-row {
+  display: flex; align-items: center; gap: var(--space-2); padding: 8px 0;
+  border-bottom: 1px solid var(--color-border); font-size: var(--text-sm);
+}
+.admin-user-row .email-col { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-user-row select { font-size: var(--text-sm); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 3px 6px; }
+.admin-user-row .btn-del {
+  border: none; background: var(--sem-err-bg); color: var(--sem-err-text);
+  border-radius: var(--radius-sm); padding: 3px 10px; cursor: pointer; font-size: var(--text-xs);
+}
+#admin-add-row { display: flex; gap: var(--space-2); margin-top: var(--space-4); flex-wrap: wrap; }
+#admin-new-email {
+  flex: 1; min-width: 180px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+  font-family: var(--font-family); font-size: var(--text-sm);
+}
+#admin-new-role { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: var(--text-sm); }
+#admin-add-btn {
+  background: #15803d; color: #fff; border: none; border-radius: var(--radius-sm);
+  padding: 8px 16px; font-weight: 700; cursor: pointer; font-size: var(--text-sm); white-space: nowrap;
+}
+#admin-result { font-size: var(--text-sm); margin-top: var(--space-2); min-height: 20px; }
+#admin-close-btn {
+  border: 1px solid var(--color-border); background: none; border-radius: var(--radius-sm);
+  padding: 8px 16px; cursor: pointer; font-family: var(--font-family); margin-top: var(--space-4);
+}
+
+/* ── スナックバー ─────────────────────────────────────────── */
+#snack {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--color-text); color: #fff; padding: 10px 24px;
+  border-radius: var(--radius-full); font-size: var(--text-sm); font-weight: 600;
+  z-index: 9000; opacity: 0; pointer-events: none; transition: opacity .3s;
+  white-space: nowrap;
+}
+#snack.show { opacity: 1; }
+
+/* ── レスポンシブ ─────────────────────────────────────────── */
+@media (max-width: 640px) {
+  header { padding: var(--space-3) var(--space-4); }
+  main { padding: var(--space-4) var(--space-3) 60px; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+  td.task-note { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- 認証オーバーレイ -->
+<div id="auth-overlay">
+  <div id="auth-card">
+    <div class="logo">📋</div>
+    <h2>管理部DXダッシュボード</h2>
+    <p>ワイズグループ社内向けシステムです。<br>Googleアカウントでログインしてください。</p>
+    <button id="login-btn">Googleでログイン</button>
+    <div id="auth-status"></div>
+  </div>
+</div>
+
+<!-- 権限管理モーダル -->
+<div id="admin-modal">
+  <div id="admin-inner">
+    <h3>アクセス管理</h3>
+    <div id="admin-user-list"><p style="color:var(--color-text-sub);font-size:var(--text-sm);">読み込み中...</p></div>
+    <div id="admin-add-row">
+      <input id="admin-new-email" type="email" placeholder="メールアドレスを追加">
+      <select id="admin-new-role">
+        <option value="viewer">viewer（閲覧のみ）</option>
+        <option value="editor">editor（編集可）</option>
+        <option value="admin">admin（管理者）</option>
+      </select>
+      <button id="admin-add-btn">追加</button>
+    </div>
+    <div id="admin-result"></div>
+    <div style="text-align:right;">
+      <button id="admin-close-btn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- スナックバー -->
+<div id="snack"></div>
+
+<!-- ヘッダー -->
+<header>
+  <h1>管理部DXダッシュボード</h1>
+  <span class="header-meta" id="last-updated"></span>
+  <span class="countdown-badge" id="countdown">読み込み中...</span>
+  <span class="header-spacer"></span>
+  <button class="header-btn" id="admin-btn" style="display:none;">管理</button>
+  <button class="header-btn" id="logout-btn" style="display:none;">ログアウト</button>
+</header>
+
+<!-- タブバー -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="overview">概要</button>
+  <button class="tab-btn" data-tab="tasks">業務一覧</button>
+  <button class="tab-btn" data-tab="checklists">チェックリスト</button>
+</div>
+
+<!-- メインコンテンツ -->
+<main>
+
+  <!-- 概要タブ -->
+  <section id="tab-overview">
+
+    <!-- サマリーカード -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="label">全体進捗</div>
+        <div class="value" id="total-progress">-</div>
+        <div class="sub" id="total-progress-sub">業務移行済み / 全業務</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">A: AI完全自動化</div>
+        <div class="value" id="cluster-a-val">-</div>
+        <div class="sub" id="cluster-a-sub">移行済み</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">B: AI下書き+人間確認</div>
+        <div class="value" id="cluster-b-val">-</div>
+        <div class="sub" id="cluster-b-sub">移行済み</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">C: 人間担当</div>
+        <div class="value" id="cluster-c-val">-</div>
+        <div class="sub" id="cluster-c-sub">移行済み</div>
+      </div>
+    </div>
+
+    <!-- クラスタ別進捗バー -->
+    <div class="progress-section">
+      <h2>クラスタ別進捗</h2>
+      <div class="progress-bar-wrap">
+        <div class="bar-label"><span>全体</span><span id="bar-total-pct">-</span></div>
+        <div class="bar-bg"><div class="bar-fg" id="bar-total" style="width:0%"></div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="bar-label"><span>A: AI完全自動化</span><span id="bar-a-pct">-</span></div>
+        <div class="bar-bg"><div class="bar-fg cluster-a" id="bar-a" style="width:0%"></div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="bar-label"><span>B: AI下書き+人間確認</span><span id="bar-b-pct">-</span></div>
+        <div class="bar-bg"><div class="bar-fg cluster-b" id="bar-b" style="width:0%"></div></div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="bar-label"><span>C: 人間担当</span><span id="bar-c-pct">-</span></div>
+        <div class="bar-bg"><div class="bar-fg cluster-c" id="bar-c" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <!-- マイルストーンタイムライン -->
+    <div class="milestone-section">
+      <h2>マイルストーン</h2>
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </section>
+
+  <!-- 業務一覧タブ -->
+  <section id="tab-tasks" class="hidden">
+    <div class="filter-bar">
+      <span class="filter-label">クラスタ:</span>
+      <button class="chip on" data-filter-cluster="">すべて</button>
+      <button class="chip" data-filter-cluster="A_AI完全自動化">A</button>
+      <button class="chip" data-filter-cluster="B_AI下書き+人間確認">B</button>
+      <button class="chip" data-filter-cluster="C_人間担当">C</button>
+      <span class="filter-label" style="margin-left:var(--space-2);">ステータス:</span>
+      <button class="chip on" data-filter-status="">すべて</button>
+      <button class="chip" data-filter-status="未着手">未着手</button>
+      <button class="chip" data-filter-status="開発中">開発中</button>
+      <button class="chip" data-filter-status="並行検証中">並行検証中</button>
+      <button class="chip" data-filter-status="移行済み">移行済み</button>
+      <button class="chip" data-filter-status="外部継続中">外部継続中</button>
+      <input class="search-input" type="search" id="task-search" placeholder="業務名・担当者で検索...">
+    </div>
+    <div class="table-wrap">
+      <table id="task-table">
+        <thead>
+          <tr>
+            <th style="min-width:200px;">業務名</th>
+            <th>クラスタ</th>
+            <th>移管先</th>
+            <th>ステータス</th>
+            <th>目標月</th>
+            <th style="min-width:160px;">備考</th>
+            <th style="min-width:120px;">更新</th>
+          </tr>
+        </thead>
+        <tbody id="task-tbody"></tbody>
+      </table>
+    </div>
+    <div id="task-empty" class="hidden" style="padding:var(--space-8);text-align:center;color:var(--color-text-sub);">
+      条件に一致する業務がありません
+    </div>
+  </section>
+
+  <!-- チェックリストタブ -->
+  <section id="tab-checklists" class="hidden">
+    <div class="checklist-section">
+      <h2>ヒアリングリスト（手順不明・引き渡し要求）</h2>
+      <div id="checklist-hearing" class="checklist-group">
+        <div class="checklist-group-header">読み込み中...</div>
+      </div>
+    </div>
+    <div class="checklist-section">
+      <h2>セキュリティ撤退タスク</h2>
+      <div id="checklist-security" class="checklist-group">
+        <div class="checklist-group-header">読み込み中...</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+'use strict';
+
+/* ── Firebase設定（wise-dev-ops） ────────────────────────── */
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB83EvRES9m-eBuQpGncFUB1x0-Fb6uRI0",
+  authDomain: "wise-dev-ops.firebaseapp.com",
+  projectId: "wise-dev-ops",
+  storageBucket: "wise-dev-ops.firebasestorage.app",
+  messagingSenderId: "503744985792",
+  appId: "1:503744985792:web:a6c0ad249af3d1cad18b25"
+};
+
+var DIRECTOR_EMAIL = 'director@wise-jmco.com';
+
+/* ── 状態 ────────────────────────────────────────────────── */
+var auth, db;
+var currentEmail = null;
+var currentRole = null; // 'admin'|'editor'|'viewer'
+var allTasks = [];
+var filterCluster = '';
+var filterStatus = '';
+var filterSearch = '';
+var unsubTasks = null;
+var unsubMilestones = null;
+var unsubChecklists = null;
+
+/* ── ヘルパー ────────────────────────────────────────────── */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showSnack(msg, duration) {
+  var el = document.getElementById('snack');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, duration || 2500);
+}
+function isAdmin() { return currentEmail === DIRECTOR_EMAIL || currentRole === 'admin'; }
+function isEditor() { return isAdmin() || currentRole === 'editor'; }
+
+/* ── 初期化 ──────────────────────────────────────────────── */
+firebase.initializeApp(FIREBASE_CONFIG);
+auth = firebase.auth();
+db   = firebase.firestore();
+
+/* ── カウントダウン ──────────────────────────────────────── */
+function updateCountdown() {
+  var end = new Date('2026-08-31T23:59:59+09:00');
+  var now = new Date();
+  var diff = Math.max(0, end - now);
+  var days = Math.ceil(diff / 86400000);
+  document.getElementById('countdown').textContent = '契約終了まで ' + days + '日';
+}
+updateCountdown();
+setInterval(updateCountdown, 60000);
+
+/* ── 認証 ────────────────────────────────────────────────── */
+document.getElementById('login-btn').addEventListener('click', function() {
+  var p = new firebase.auth.GoogleAuthProvider();
+  document.getElementById('auth-status').textContent = 'ログイン中...';
+  auth.signInWithPopup(p).catch(function(e) {
+    document.getElementById('auth-status').textContent = 'ログイン失敗: ' + e.message;
+  });
+});
+document.getElementById('logout-btn').addEventListener('click', function() { auth.signOut(); });
+
+auth.onAuthStateChanged(function(user) {
+  if (!user) {
+    currentEmail = null; currentRole = null;
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('admin-btn').style.display = 'none';
+    document.getElementById('logout-btn').style.display = 'none';
+    if (unsubTasks) { unsubTasks(); unsubTasks = null; }
+    return;
+  }
+  var email = (user.email || '').toLowerCase();
+  currentEmail = email;
+  document.getElementById('auth-status').textContent = '権限確認中...';
+  checkAccess(email);
+});
+
+function checkAccess(email) {
+  if (email === DIRECTOR_EMAIL) {
+    currentRole = 'admin';
+    onAccessGranted();
+    return;
+  }
+  db.collection('adx_allowlist').doc(email).get().then(function(snap) {
+    if (snap.exists && snap.data().role) {
+      currentRole = snap.data().role;
+      onAccessGranted();
+    } else {
+      document.getElementById('auth-status').textContent = 'アクセス権限がありません。管理者にお問い合わせください。';
+    }
+  }).catch(function(e) {
+    document.getElementById('auth-status').textContent = 'エラー: ' + e.message;
+  });
+}
+
+function onAccessGranted() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('logout-btn').style.display = '';
+  if (isAdmin()) document.getElementById('admin-btn').style.display = '';
+  initData();
+  updateLastUpdated();
+}
+
+function updateLastUpdated() {
+  var el = document.getElementById('last-updated');
+  var now = new Date();
+  el.textContent = now.toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit' }) + ' 現在';
+}
+
+/* ── タブ切替 ────────────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    var tab = btn.dataset.tab;
+    ['overview','tasks','checklists'].forEach(function(t) {
+      var el = document.getElementById('tab-' + t);
+      el.classList.toggle('hidden', t !== tab);
+    });
+  });
+});
+
+/* ── データ読み込み ──────────────────────────────────────── */
+function initData() {
+  loadTasks();
+  loadMilestones();
+  loadChecklists();
+}
+
+/* ── 業務一覧 ────────────────────────────────────────────── */
+function loadTasks() {
+  if (unsubTasks) { unsubTasks(); }
+  unsubTasks = db.collection('adx_tasks').orderBy('cluster').onSnapshot(function(snap) {
+    allTasks = snap.docs.map(function(d) { return Object.assign({ _id: d.id }, d.data()); });
+    renderProgress();
+    renderTasks();
+  }, function(err) {
+    console.error('tasks error:', err);
+  });
+}
+
+function renderProgress() {
+  var total = allTasks.length;
+  var doneStatuses = ['移行済み', '外部継続中'];
+  var done = allTasks.filter(function(t){ return doneStatuses.indexOf(t.status) >= 0; }).length;
+
+  var clusterDone = { A: 0, B: 0, C: 0 };
+  var clusterTotal = { A: 0, B: 0, C: 0 };
+  allTasks.forEach(function(t) {
+    var cl = (t.cluster || '').charAt(0);
+    if (clusterTotal[cl] !== undefined) {
+      clusterTotal[cl]++;
+      if (doneStatuses.indexOf(t.status) >= 0) clusterDone[cl]++;
+    }
+  });
+
+  var pct = total ? Math.round(done / total * 100) : 0;
+  document.getElementById('total-progress').textContent = pct + '%';
+  document.getElementById('total-progress-sub').textContent = done + ' / ' + total + ' 業務';
+
+  function clusterPct(cl) { return clusterTotal[cl] ? Math.round(clusterDone[cl] / clusterTotal[cl] * 100) : 0; }
+
+  document.getElementById('cluster-a-val').textContent = clusterPct('A') + '%';
+  document.getElementById('cluster-a-sub').textContent = clusterDone.A + ' / ' + clusterTotal.A;
+  document.getElementById('cluster-b-val').textContent = clusterPct('B') + '%';
+  document.getElementById('cluster-b-sub').textContent = clusterDone.B + ' / ' + clusterTotal.B;
+  document.getElementById('cluster-c-val').textContent = clusterPct('C') + '%';
+  document.getElementById('cluster-c-sub').textContent = clusterDone.C + ' / ' + clusterTotal.C;
+
+  document.getElementById('bar-total').style.width = pct + '%';
+  document.getElementById('bar-total-pct').textContent = pct + '%';
+  document.getElementById('bar-a').style.width = clusterPct('A') + '%';
+  document.getElementById('bar-a-pct').textContent = clusterPct('A') + '%';
+  document.getElementById('bar-b').style.width = clusterPct('B') + '%';
+  document.getElementById('bar-b-pct').textContent = clusterPct('B') + '%';
+  document.getElementById('bar-c').style.width = clusterPct('C') + '%';
+  document.getElementById('bar-c-pct').textContent = clusterPct('C') + '%';
+}
+
+function renderTasks() {
+  var filtered = allTasks.filter(function(t) {
+    if (filterCluster && t.cluster !== filterCluster) return false;
+    if (filterStatus && t.status !== filterStatus) return false;
+    if (filterSearch) {
+      var q = filterSearch.toLowerCase();
+      if ((t.title || '').toLowerCase().indexOf(q) < 0 &&
+          (t.owner || '').toLowerCase().indexOf(q) < 0 &&
+          (t.note || '').toLowerCase().indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+
+  var tbody = document.getElementById('task-tbody');
+  var empty = document.getElementById('task-empty');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  var html = filtered.map(function(t) {
+    var clLetter = (t.cluster || '').charAt(0);
+    var clBadge = '<span class="badge cluster-' + clLetter.toLowerCase() + '">' + esc(clLetter || '-') + '</span>';
+    var statusOpts = ['未着手','開発中','並行検証中','移行済み','外部継続中'];
+    var statusHtml;
+    if (isEditor()) {
+      statusHtml = '<select class="status-select" data-id="' + esc(t._id) + '">' +
+        statusOpts.map(function(s){
+          return '<option value="' + esc(s) + '"' + (t.status === s ? ' selected' : '') + '>' + esc(s) + '</option>';
+        }).join('') + '</select>';
+    } else {
+      statusHtml = '<span class="badge ' + statusClass(t.status) + '">' + esc(t.status || '-') + '</span>';
+    }
+    var updatedAt = t.updatedAt ? (new Date(t.updatedAt.toDate ? t.updatedAt.toDate() : t.updatedAt)).toLocaleDateString('ja-JP', {month:'numeric',day:'numeric'}) : '';
+    var updatedBy = t.updatedBy || '';
+    return '<tr>' +
+      '<td class="task-title">' + esc(t.title || '') + '</td>' +
+      '<td>' + clBadge + '</td>' +
+      '<td><span style="font-size:var(--text-sm)">' + esc(t.owner || '') + '</span></td>' +
+      '<td>' + statusHtml + '</td>' +
+      '<td><span style="font-size:var(--text-sm)">' + esc(t.targetMonth || '') + '</span></td>' +
+      '<td class="task-note">' + esc(t.note || '') + '</td>' +
+      '<td style="font-size:var(--text-xs);color:var(--color-text-sub);">' + esc(updatedAt ? updatedAt + ' ' + updatedBy : '') + '</td>' +
+      '</tr>';
+  }).join('');
+  tbody.innerHTML = html;
+
+  // ステータス変更イベント
+  tbody.querySelectorAll('.status-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var id = sel.dataset.id;
+      var newStatus = sel.value;
+      sel.classList.add('status-saving');
+      db.collection('adx_tasks').doc(id).update({
+        status: newStatus,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentEmail
+      }).then(function() {
+        sel.classList.remove('status-saving');
+        showSnack('ステータスを更新しました');
+      }).catch(function(err) {
+        sel.classList.remove('status-saving');
+        showSnack('更新失敗: ' + err.message);
+      });
+    });
+  });
+}
+
+function statusClass(s) {
+  var map = { '移行済み':'done', '並行検証中':'parallel', '開発中':'dev', '未着手':'none', '外部継続中':'external' };
+  return map[s] || 'none';
+}
+
+/* ── フィルタ ────────────────────────────────────────────── */
+document.querySelectorAll('[data-filter-cluster]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('[data-filter-cluster]').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    filterCluster = btn.dataset.filterCluster;
+    renderTasks();
+  });
+});
+document.querySelectorAll('[data-filter-status]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('[data-filter-status]').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    filterStatus = btn.dataset.filterStatus;
+    renderTasks();
+  });
+});
+document.getElementById('task-search').addEventListener('input', function() {
+  filterSearch = this.value.trim();
+  renderTasks();
+});
+
+/* ── マイルストーン ──────────────────────────────────────── */
+function loadMilestones() {
+  db.collection('adx_milestones').orderBy('sortOrder').get().then(function(snap) {
+    renderTimeline(snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); }));
+  }).catch(function(err){
+    console.error('milestones error:', err);
+    // フォールバック: ハードコードデータ
+    renderTimeline(getDefaultMilestones());
+  });
+}
+
+function renderTimeline(milestones) {
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var html = milestones.map(function(m) {
+    var startDate = m.startDate ? new Date(m.startDate) : null;
+    var endDate = m.endDate ? new Date(m.endDate) : null;
+    var isPast = endDate && endDate < today;
+    var isCurrent = startDate && endDate && startDate <= today && today <= endDate;
+    var cls = isPast ? 'past' : (isCurrent ? 'today' : '');
+    return '<div class="milestone-item ' + cls + '">' +
+      (isCurrent ? '<div class="today-marker">進行中</div>' : '') +
+      '<div class="ms-date">' + esc(m.dateLabel || '') + '</div>' +
+      '<div class="ms-title">' + esc(m.title || '') + '</div>' +
+      (m.note ? '<div class="ms-note">' + esc(m.note) + '</div>' : '') +
+      '</div>';
+  }).join('');
+  document.getElementById('timeline').innerHTML = html;
+}
+
+function getDefaultMilestones() {
+  return [
+    { dateLabel:'7/6-9', title:'勤怠締め並行検証', note:'AIとキャスター両側で実行・突き合わせ', startDate:'2026-07-06', endDate:'2026-07-09', sortOrder:1 },
+    { dateLabel:'7/10-12', title:'業務数値分析 並行検証', note:'帳票読取・Sheets転記を突き合わせ', startDate:'2026-07-10', endDate:'2026-07-12', sortOrder:2 },
+    { dateLabel:'7月', title:'請求書DL引継ぎ・入退社実地テスト', note:'佐々木さんが横で教わる最後の機会', startDate:'2026-07-13', endDate:'2026-07-31', sortOrder:3 },
+    { dateLabel:'8月', title:'主担当反転＋セキュリティ撤退', note:'ワイズ側主担当・キャスターはチェック役', startDate:'2026-08-01', endDate:'2026-08-30', sortOrder:4 },
+    { dateLabel:'8/31', title:'契約終了', note:'9月締めから完全単独運用', startDate:'2026-08-31', endDate:'2026-08-31', sortOrder:5 }
+  ];
+}
+
+/* ── チェックリスト ──────────────────────────────────────── */
+function loadChecklists() {
+  db.collection('adx_checklists').orderBy('sortOrder').get().then(function(snap) {
+    var items = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    renderChecklists(items);
+  }).catch(function(err) {
+    console.error('checklists error:', err);
+    document.getElementById('checklist-hearing').querySelector('.checklist-group-header').textContent = 'エラー: ' + err.message;
+  });
+}
+
+function renderChecklists(items) {
+  var hearing = items.filter(function(i){ return i.group === 'hearing'; });
+  var security = items.filter(function(i){ return i.group === 'security'; });
+
+  renderChecklistGroup('checklist-hearing', 'ヒアリングリスト', hearing);
+  renderChecklistGroup('checklist-security', 'セキュリティ撤退タスク（8月実施）', security);
+}
+
+function renderChecklistGroup(containerId, title, items) {
+  var container = document.getElementById(containerId);
+  var doneCount = items.filter(function(i){ return i.checked; }).length;
+  var headerHtml = '<div class="checklist-group-header">' + esc(title) + ' <span class="badge ' + (doneCount === items.length && items.length > 0 ? 'done' : 'none') + '">' + doneCount + '/' + items.length + '</span></div>';
+  var itemsHtml = items.map(function(item) {
+    var cls = item.checked ? ' checked' : '';
+    var canEdit = isEditor();
+    return '<div class="checklist-item' + cls + '" data-id="' + esc(item._id) + '">' +
+      '<input type="checkbox" ' + (item.checked ? 'checked' : '') + (canEdit ? '' : ' disabled') + '>' +
+      '<span class="item-num">' + esc(item.num || '') + '</span>' +
+      '<span class="item-text">' + esc(item.text || '') + '</span>' +
+      (item.updatedBy ? '<span class="item-updater">' + esc(item.updatedBy.split('@')[0]) + '</span>' : '') +
+      '</div>';
+  }).join('');
+  container.innerHTML = headerHtml + itemsHtml;
+
+  if (isEditor()) {
+    container.querySelectorAll('.checklist-item').forEach(function(row) {
+      var cb = row.querySelector('input[type="checkbox"]');
+      cb.addEventListener('change', function() {
+        var id = row.dataset.id;
+        var checked = cb.checked;
+        db.collection('adx_checklists').doc(id).update({
+          checked: checked,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy: currentEmail
+        }).then(function() {
+          row.classList.toggle('checked', checked);
+          showSnack(checked ? 'チェック済みにしました' : 'チェックを外しました');
+          // ヘッダー再描画のため再取得
+          loadChecklists();
+        }).catch(function(err) {
+          cb.checked = !checked; // ロールバック
+          showSnack('更新失敗: ' + err.message);
+        });
+      });
+    });
+  }
+}
+
+/* ── 権限管理モーダル ─────────────────────────────────────── */
+document.getElementById('admin-btn').addEventListener('click', function() {
+  document.getElementById('admin-modal').classList.add('open');
+  loadAdminUsers();
+});
+document.getElementById('admin-close-btn').addEventListener('click', function() {
+  document.getElementById('admin-modal').classList.remove('open');
+});
+document.getElementById('admin-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+
+function loadAdminUsers() {
+  var listEl = document.getElementById('admin-user-list');
+  listEl.innerHTML = '<p style="font-size:var(--text-sm);color:var(--color-text-sub);">読み込み中...</p>';
+  db.collection('adx_allowlist').get().then(function(snap) {
+    if (snap.empty) {
+      listEl.innerHTML = '<p style="font-size:var(--text-sm);color:var(--color-text-sub);">登録ユーザーなし（directorは常時admin）</p>';
+      return;
+    }
+    var rows = snap.docs.map(function(d) {
+      var email = d.id;
+      var role = d.data().role || 'viewer';
+      var isSelf = email === currentEmail;
+      return '<div class="admin-user-row">' +
+        '<span class="email-col">' + esc(email) + '</span>' +
+        '<select data-email="' + esc(email) + '" ' + (isSelf ? 'disabled' : '') + '>' +
+        ['viewer','editor','admin'].map(function(r){ return '<option value="' + r + '"' + (role===r?' selected':'') + '>' + r + '</option>'; }).join('') +
+        '</select>' +
+        (!isSelf ? '<button class="btn-del" data-email="' + esc(email) + '">削除</button>' : '<span style="font-size:var(--text-xs);color:var(--color-text-sub);">(自分)</span>') +
+        '</div>';
+    }).join('');
+    listEl.innerHTML = rows;
+
+    listEl.querySelectorAll('select[data-email]').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        db.collection('adx_allowlist').doc(sel.dataset.email).update({ role: sel.value }).then(function() {
+          showSnack('ロールを変更しました');
+        });
+      });
+    });
+    listEl.querySelectorAll('.btn-del').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (!confirm(btn.dataset.email + ' を削除しますか？')) return;
+        db.collection('adx_allowlist').doc(btn.dataset.email).delete().then(function() {
+          showSnack('削除しました');
+          loadAdminUsers();
+        });
+      });
+    });
+  });
+}
+
+document.getElementById('admin-add-btn').addEventListener('click', function() {
+  var email = document.getElementById('admin-new-email').value.trim().toLowerCase();
+  var role = document.getElementById('admin-new-role').value;
+  var resultEl = document.getElementById('admin-result');
+  if (!email || !email.includes('@')) {
+    resultEl.textContent = '有効なメールアドレスを入力してください';
+    resultEl.style.color = 'var(--sem-err-text)';
+    return;
+  }
+  db.collection('adx_allowlist').doc(email).set({ role: role, addedAt: firebase.firestore.FieldValue.serverTimestamp(), addedBy: currentEmail }).then(function() {
+    resultEl.textContent = email + ' を追加しました（' + role + '）';
+    resultEl.style.color = 'var(--sem-ok-text)';
+    document.getElementById('admin-new-email').value = '';
+    loadAdminUsers();
+  }).catch(function(err) {
+    resultEl.textContent = 'エラー: ' + err.message;
+    resultEl.style.color = 'var(--sem-err-text)';
+  });
+});
+
+</script>
+</body>
+</html>
