@@ -517,12 +517,27 @@ updateCountdown();
 setInterval(updateCountdown, 60000);
 
 /* ── 認証 ────────────────────────────────────────────────── */
-document.getElementById('login-btn').addEventListener('click', function() {
+// ポップアップがブロックされる環境（管理部PC等）ではリダイレクト方式に自動フォールバック
+function googleProvider() {
   var p = new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({ prompt: 'select_account' }); // 毎回アカウント選択を出す（別アカウント誤ログイン対策）
+  return p;
+}
+document.getElementById('login-btn').addEventListener('click', function() {
   document.getElementById('auth-status').textContent = 'ログイン中...';
-  auth.signInWithPopup(p).catch(function(e) {
-    document.getElementById('auth-status').textContent = 'ログイン失敗: ' + e.message;
+  auth.signInWithPopup(googleProvider()).catch(function(e) {
+    var code = e && e.code ? e.code : '';
+    if (code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request' || code === 'auth/operation-not-supported-in-this-environment') {
+      document.getElementById('auth-status').textContent = 'ポップアップが開けないため、画面が切り替わってログインします...';
+      auth.signInWithRedirect(googleProvider());
+    } else {
+      document.getElementById('auth-status').textContent = 'ログイン失敗: ' + (e.message || code);
+    }
   });
+});
+// リダイレクト方式でのログイン結果・エラーを拾う
+auth.getRedirectResult().catch(function(e) {
+  document.getElementById('auth-status').textContent = 'ログイン失敗: ' + (e.message || (e && e.code) || '不明なエラー');
 });
 document.getElementById('logout-btn').addEventListener('click', function() { auth.signOut(); });
 
@@ -552,7 +567,7 @@ function checkAccess(email) {
       currentRole = snap.data().role;
       onAccessGranted();
     } else {
-      document.getElementById('auth-status').textContent = 'アクセス権限がありません。管理者にお問い合わせください。';
+      document.getElementById('auth-status').innerHTML = '「' + email + '」にはアクセス権限がありません。<br>意図したアカウントと違う場合は「ログアウト」して入り直してください。権限が必要な場合は director@wise-jmco.com へご連絡ください。';
     }
   }).catch(function(e) {
     document.getElementById('auth-status').textContent = 'エラー: ' + e.message;
