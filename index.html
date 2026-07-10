@@ -199,6 +199,11 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
 .badge.cluster-a { background: #d1fae5; color: #065f46; }
 .badge.cluster-b { background: #fef3c7; color: #92400e; }
 .badge.cluster-c { background: var(--sem-purple-bg); color: var(--sem-purple-text); }
+.badge.ho-ai      { background: #d1fae5; color: #065f46; }
+.badge.ho-wise    { background: #dbeafe; color: #1d4ed8; }
+.badge.ho-caster  { background: #fee2e2; color: #b91c1c; }
+.badge.ho-undecided { background: #fef3c7; color: #92400e; }
+.badge.ho-notdone { background: var(--color-border); color: var(--color-text-sub); }
 
 /* ── ステータスセレクト ───────────────────────────────────── */
 .status-select {
@@ -400,6 +405,12 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
       </div>
     </div>
 
+    <!-- 引継ぎ先別内訳 -->
+    <div class="progress-section" id="handover-summary-section" style="display:none;">
+      <h2>引継ぎ先別 件数内訳</h2>
+      <div id="handover-summary-bars"></div>
+    </div>
+
     <!-- マイルストーンタイムライン -->
     <div class="milestone-section">
       <h2>マイルストーン</h2>
@@ -424,6 +435,15 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
       <button class="chip" data-filter-status="外部継続中">外部継続中</button>
       <input class="search-input" type="search" id="task-search" placeholder="業務名・担当者で検索...">
     </div>
+    <div class="filter-bar" style="margin-top:-8px;">
+      <span class="filter-label">引継ぎ先:</span>
+      <button class="chip on" data-filter-handover="">すべて</button>
+      <button class="chip" data-filter-handover="ai">AI</button>
+      <button class="chip" data-filter-handover="wise">ワイズ</button>
+      <button class="chip" data-filter-handover="caster">キャスター残</button>
+      <button class="chip" data-filter-handover="undecided">要決定</button>
+      <button class="chip" data-filter-handover="notdone">未実施</button>
+    </div>
     <div class="table-wrap">
       <table id="task-table">
         <thead>
@@ -431,6 +451,7 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
             <th style="min-width:200px;">業務名</th>
             <th>クラスタ</th>
             <th>移管先</th>
+            <th>引継ぎ先</th>
             <th>ステータス</th>
             <th>目標月</th>
             <th style="min-width:160px;">備考</th>
@@ -520,6 +541,7 @@ var allTasks = [];
 var filterCluster = '';
 var filterStatus = '';
 var filterSearch = '';
+var filterHandover = '';
 var unsubTasks = null;
 var unsubMilestones = null;
 var unsubChecklists = null;
@@ -693,12 +715,40 @@ function renderProgress() {
   document.getElementById('bar-b-pct').textContent = clusterPct('B') + '%';
   document.getElementById('bar-c').style.width = clusterPct('C') + '%';
   document.getElementById('bar-c-pct').textContent = clusterPct('C') + '%';
+
+  // 引継ぎ先別内訳（handoverToフィールドが存在する場合のみ表示）
+  var hasHandover = allTasks.some(function(t){ return t.handoverTo !== undefined; });
+  var summarySection = document.getElementById('handover-summary-section');
+  if (hasHandover) {
+    var hoLabels = { ai:'AI', wise:'ワイズ', caster:'キャスター残', undecided:'要決定', notdone:'未実施' };
+    var hoKeys = ['ai','wise','caster','undecided','notdone'];
+    var hoCounts = { ai:0, wise:0, caster:0, undecided:0, notdone:0 };
+    allTasks.forEach(function(t) {
+      var k = t.handoverTo || 'undecided';
+      if (hoCounts[k] !== undefined) hoCounts[k]++;
+      else hoCounts['undecided']++;
+    });
+    var barsHtml = hoKeys.map(function(k) {
+      var cnt = hoCounts[k];
+      var p = total ? Math.round(cnt / total * 100) : 0;
+      var colorMap = { ai:'#10b981', wise:'#3b82f6', caster:'#ef4444', undecided:'#f59e0b', notdone:'#94a3b8' };
+      return '<div class="progress-bar-wrap">' +
+        '<div class="bar-label"><span>' + hoLabels[k] + '</span><span>' + cnt + '件 (' + p + '%)</span></div>' +
+        '<div class="bar-bg"><div class="bar-fg" style="width:' + p + '%;background:' + colorMap[k] + '"></div></div>' +
+        '</div>';
+    }).join('');
+    document.getElementById('handover-summary-bars').innerHTML = barsHtml;
+    summarySection.style.display = '';
+  } else {
+    summarySection.style.display = 'none';
+  }
 }
 
 function renderTasks() {
   var filtered = allTasks.filter(function(t) {
     if (filterCluster && t.cluster !== filterCluster) return false;
     if (filterStatus && t.status !== filterStatus) return false;
+    if (filterHandover && (t.handoverTo || 'undecided') !== filterHandover) return false;
     if (filterSearch) {
       var q = filterSearch.toLowerCase();
       if ((t.title || '').toLowerCase().indexOf(q) < 0 &&
@@ -717,9 +767,16 @@ function renderTasks() {
   }
   empty.classList.add('hidden');
 
+  var hoLabels = { ai:'AI', wise:'ワイズ', caster:'キャスター残', undecided:'要決定', notdone:'未実施' };
   var html = filtered.map(function(t) {
     var clLetter = (t.cluster || '').charAt(0);
     var clBadge = '<span class="badge cluster-' + clLetter.toLowerCase() + '">' + esc(clLetter || '-') + '</span>';
+    var ho = t.handoverTo || 'undecided';
+    var hoLabel = hoLabels[ho] || ho;
+    var hoBadge = '<span class="badge ho-' + esc(ho) + '">' + esc(hoLabel) + '</span>';
+    if (t.manualUrl) {
+      hoBadge += ' <a href="' + esc(t.manualUrl) + '" target="_blank" rel="noopener" title="マニュアル" style="text-decoration:none;">📄</a>';
+    }
     var statusOpts = ['未着手','開発中','並行検証中','移行済み','外部継続中'];
     var statusHtml;
     if (isEditor()) {
@@ -736,6 +793,7 @@ function renderTasks() {
       '<td class="task-title">' + esc(t.title || '') + '</td>' +
       '<td>' + clBadge + '</td>' +
       '<td><span style="font-size:var(--text-sm)">' + esc(t.owner || '') + '</span></td>' +
+      '<td>' + hoBadge + '</td>' +
       '<td>' + statusHtml + '</td>' +
       '<td><span style="font-size:var(--text-sm)">' + esc(t.targetMonth || '') + '</span></td>' +
       '<td class="task-note">' + esc(t.note || '') + '</td>' +
@@ -790,6 +848,14 @@ document.querySelectorAll('[data-filter-status]').forEach(function(btn) {
 document.getElementById('task-search').addEventListener('input', function() {
   filterSearch = this.value.trim();
   renderTasks();
+});
+document.querySelectorAll('[data-filter-handover]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('[data-filter-handover]').forEach(function(b){ b.classList.remove('on'); });
+    btn.classList.add('on');
+    filterHandover = btn.dataset.filterHandover;
+    renderTasks();
+  });
 });
 
 /* ── マイルストーン ──────────────────────────────────────── */
