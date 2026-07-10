@@ -775,7 +775,10 @@ function renderTasks() {
     var hoLabel = hoLabels[ho] || ho;
     var hoBadge = '<span class="badge ho-' + esc(ho) + '">' + esc(hoLabel) + '</span>';
     if (t.manualUrl) {
-      hoBadge += ' <a href="' + esc(t.manualUrl) + '" target="_blank" rel="noopener" title="マニュアル" style="text-decoration:none;">📄</a>';
+      var safeUrl = /^https?:\/\//i.test(t.manualUrl) ? t.manualUrl : '';
+      if (safeUrl) {
+        hoBadge += ' <a href="' + esc(safeUrl) + '" target="_blank" rel="noopener noreferrer" title="マニュアル" style="text-decoration:none;">📄</a>';
+      }
     }
     var statusOpts = ['未着手','開発中','並行検証中','移行済み','外部継続中'];
     var statusHtml;
