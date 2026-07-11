@@ -278,6 +278,30 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   padding: 8px 16px; cursor: pointer; font-family: var(--font-family); margin-top: var(--space-4);
 }
 
+/* ── 使い方モーダル ─────────────────────────────────────── */
+#help-modal {
+  position: fixed; inset: 0; background: rgba(30,41,59,.5);
+  display: none; align-items: center; justify-content: center; z-index: 8000;
+}
+#help-modal.open { display: flex; }
+#help-inner {
+  background: var(--color-surface); border-radius: var(--radius-lg);
+  padding: var(--space-6); width: min(600px, 94vw);
+  box-shadow: 0 8px 32px rgba(0,0,0,.18); max-height: 82vh; overflow-y: auto;
+}
+#help-inner h3 { margin: 0 0 var(--space-4); font-size: var(--text-lg); }
+#help-inner h4 {
+  font-size: var(--text-sm); font-weight: 700; margin: var(--space-4) 0 var(--space-2);
+  color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 4px;
+}
+#help-inner ul { margin: 0 0 var(--space-2) var(--space-4); padding: 0; }
+#help-inner ul li { font-size: var(--text-sm); line-height: 1.8; }
+#help-inner p { font-size: var(--text-sm); line-height: 1.8; margin-bottom: var(--space-2); }
+#help-close-btn {
+  border: 1px solid var(--color-border); background: none; border-radius: var(--radius-sm);
+  padding: 8px 16px; cursor: pointer; font-family: var(--font-family); margin-top: var(--space-4);
+}
+
 /* ── スナックバー ─────────────────────────────────────────── */
 #snack {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -331,6 +355,45 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   </div>
 </div>
 
+<!-- 使い方モーダル -->
+<div id="help-modal">
+  <div id="help-inner">
+    <h3>このダッシュボードの使い方</h3>
+    <h4>このダッシュボードとは</h4>
+    <p>キャスター（外部委託）から引き継いだ管理部業務を一覧化し、AIによる自動化・巻き取り状況を可視化するダッシュボードです。</p>
+    <h4>タブの見方</h4>
+    <ul>
+      <li><strong>概要：</strong>全体の進捗サマリ（自動化区分別・引き継ぎ先別の件数と割合）</li>
+      <li><strong>業務一覧：</strong>各業務を一覧表示。自動化区分・引き継ぎ先・ステータスで絞り込み＋検索。編集権限があればステータスを変更可</li>
+      <li><strong>チェックリスト：</strong>移行にあたっての確認項目</li>
+      <li><strong>📅 年間リマインド：</strong>AIが自動投稿する年間・月次リマインド一覧</li>
+      <li><strong>🕐 勤怠チェック：</strong>KOT（勤怠）の自動チェック結果</li>
+    </ul>
+    <h4>自動化区分（A/B/C）</h4>
+    <ul>
+      <li><strong>A：AI完全自動化</strong> … 人の手を介さずAIが処理</li>
+      <li><strong>B：AI下書き＋人間確認</strong> … AIが下書きし人が最終確認</li>
+      <li><strong>C：人間担当</strong> … AI化しない／できず人が担当</li>
+    </ul>
+    <h4>引き継ぎ先</h4>
+    <ul>
+      <li><strong>AI</strong>＝AIが巻き取り済み</li>
+      <li><strong>ワイズ</strong>＝ワイズ社員が担当</li>
+      <li><strong>キャスター残</strong>＝まだキャスター業務として残存</li>
+      <li><strong>要決定</strong>＝担当未定</li>
+      <li><strong>未実施</strong></li>
+    </ul>
+    <h4>データと権限</h4>
+    <ul>
+      <li>データはクラウド（Firestore）にリアルタイム連動。表示は自動更新</li>
+      <li>閲覧はviewer、ステータス編集はeditor以上、権限付与はadminのみ（ヘッダー「権限管理」から）</li>
+    </ul>
+    <div style="text-align:right;">
+      <button id="help-close-btn">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- スナックバー -->
 <div id="snack"></div>
 
@@ -341,7 +404,8 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   <span class="countdown-badge" id="countdown">読み込み中...</span>
   <span class="header-spacer"></span>
   <a class="header-btn" href="https://wiseinc-pharmacy.github.io/bot-channel-map/" target="_blank" rel="noopener" style="text-decoration:none;">🤖 BOT一覧</a>
-  <button class="header-btn" id="admin-btn" style="display:none;">管理</button>
+  <button class="header-btn" id="help-btn">❓ 使い方</button>
+  <button class="header-btn" id="admin-btn" style="display:none;">権限管理</button>
   <button class="header-btn" id="logout-btn" style="display:none;">ログアウト</button>
 </header>
 
@@ -421,11 +485,11 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   <!-- 業務一覧タブ -->
   <section id="tab-tasks" class="hidden">
     <div class="filter-bar">
-      <span class="filter-label">クラスタ:</span>
+      <span class="filter-label">自動化区分:</span>
       <button class="chip on" data-filter-cluster="">すべて</button>
-      <button class="chip" data-filter-cluster="A_AI完全自動化">A</button>
-      <button class="chip" data-filter-cluster="B_AI下書き+人間確認">B</button>
-      <button class="chip" data-filter-cluster="C_人間担当">C</button>
+      <button class="chip" data-filter-cluster="A_AI完全自動化">A：完全自動化</button>
+      <button class="chip" data-filter-cluster="B_AI下書き+人間確認">B：下書き＋確認</button>
+      <button class="chip" data-filter-cluster="C_人間担当">C：人間担当</button>
       <span class="filter-label" style="margin-left:var(--space-2);">ステータス:</span>
       <button class="chip on" data-filter-status="">すべて</button>
       <button class="chip" data-filter-status="未着手">未着手</button>
@@ -435,6 +499,7 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
       <button class="chip" data-filter-status="外部継続中">外部継続中</button>
       <input class="search-input" type="search" id="task-search" placeholder="業務名・担当者で検索...">
     </div>
+    <div class="filter-bar" style="margin-top:-8px;"><span class="filter-label" style="font-weight:400;color:var(--color-text-sub,#64748b);font-size:.78rem;">※ A＝AIが完全自動化／B＝AIが下書き→人が確認／C＝人が担当</span></div>
     <div class="filter-bar" style="margin-top:-8px;">
       <span class="filter-label">引継ぎ先:</span>
       <button class="chip on" data-filter-handover="">すべて</button>
@@ -449,7 +514,7 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
         <thead>
           <tr>
             <th style="min-width:200px;">業務名</th>
-            <th>クラスタ</th>
+            <th>自動化区分</th>
             <th>移管先</th>
             <th>引継ぎ先</th>
             <th>ステータス</th>
@@ -770,7 +835,9 @@ function renderTasks() {
   var hoLabels = { ai:'AI', wise:'ワイズ', caster:'キャスター残', undecided:'要決定', notdone:'未実施' };
   var html = filtered.map(function(t) {
     var clLetter = (t.cluster || '').charAt(0);
-    var clBadge = '<span class="badge cluster-' + clLetter.toLowerCase() + '">' + esc(clLetter || '-') + '</span>';
+    var clTitleMap = { A:'A：AI完全自動化', B:'B：AI下書き＋人間確認', C:'C：人間担当' };
+    var clTitle = clTitleMap[clLetter] || clLetter;
+    var clBadge = '<span class="badge cluster-' + clLetter.toLowerCase() + '" title="' + esc(clTitle) + '">' + esc(clLetter || '-') + '</span>';
     var ho = t.handoverTo || 'undecided';
     var hoLabel = hoLabels[ho] || ho;
     var hoBadge = '<span class="badge ho-' + esc(ho) + '">' + esc(hoLabel) + '</span>';
@@ -959,6 +1026,17 @@ function renderChecklistGroup(containerId, title, items) {
     });
   }
 }
+
+/* ── 使い方モーダル ────────────────────────────────────────── */
+document.getElementById('help-btn').addEventListener('click', function() {
+  document.getElementById('help-modal').classList.add('open');
+});
+document.getElementById('help-close-btn').addEventListener('click', function() {
+  document.getElementById('help-modal').classList.remove('open');
+});
+document.getElementById('help-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
 
 /* ── 権限管理モーダル ─────────────────────────────────────── */
 document.getElementById('admin-btn').addEventListener('click', function() {
