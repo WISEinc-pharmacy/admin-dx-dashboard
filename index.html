@@ -319,6 +319,84 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   .summary-grid { grid-template-columns: 1fr 1fr; }
   td.task-note { display: none; }
 }
+
+/* 管理部タスク確認タブ */
+.kt-filter-btn {
+  padding: 6px 14px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: all 0.2s;
+}
+.kt-filter-btn.active {
+  background: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+.kt-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.kt-card.status-open   { border-left: 4px solid #ea4335; }
+.kt-card.status-waiting { border-left: 4px solid #fbbc04; }
+.kt-card.status-done   { border-left: 4px solid #34a853; opacity: 0.7; }
+.kt-card.status-cancelled { border-left: 4px solid #bbb; opacity: 0.5; }
+.kt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.kt-status-badge {
+  font-size: 0.75em;
+  padding: 2px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.kt-status-badge.open     { background: #fce8e6; color: #c62828; }
+.kt-status-badge.waiting  { background: #fff8e1; color: #f57f17; }
+.kt-status-badge.done     { background: #e8f5e9; color: #2e7d32; }
+.kt-status-badge.cancelled { background: #f5f5f5; color: #757575; }
+.kt-text {
+  font-size: 0.95em;
+  color: #333;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.kt-meta {
+  font-size: 0.78em;
+  color: #888;
+  margin-top: 6px;
+}
+.kt-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.kt-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.82em;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+.kt-btn-done    { background: #34a853; color: white; }
+.kt-btn-done:hover { background: #2e7d32; }
+.kt-btn-waiting { background: #fbbc04; color: #333; }
+.kt-btn-waiting:hover { background: #f9a825; }
+.kt-btn-open    { background: #ea4335; color: white; }
+.kt-btn-open:hover { background: #c62828; }
+.kt-link { font-size: 0.8em; color: #1a73e8; text-decoration: none; }
+.kt-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -416,6 +494,7 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
   <button class="tab-btn" data-tab="checklists">チェックリスト</button>
   <button class="tab-btn" data-tab="reminders">📅 年間リマインド</button>
   <button class="tab-btn" data-tab="attendance">🕐 勤怠チェック</button>
+  <button class="tab-btn" data-tab="kanribu_tasks">📋 管理部タスク</button>
 </div>
 
 <!-- メインコンテンツ -->
@@ -581,6 +660,29 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
     <p style="margin-top:14px;color:#64748b;font-size:.8rem">※ 店舗への修正依頼投稿・社労士報告下書きは裏側の自動処理が実施（社労士への最終送信のみ人の承認）。</p>
   </section>
 
+<!-- 管理部タスク確認タブ -->
+<section id="tab-kanribu_tasks" class="hidden">
+  <div class="section-header">
+    <h2>📋 管理部タスク確認</h2>
+    <p style="color:#666;font-size:0.9em;">Slackで <strong>:管理部_タスク:</strong> スタンプが押されたメッセージを一覧表示します。</p>
+  </div>
+
+  <!-- フィルター -->
+  <div class="kanribu-filter" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <button class="kt-filter-btn active" data-status="active" onclick="setKanribuFilter('active')">📌 未完了</button>
+    <button class="kt-filter-btn" data-status="open" onclick="setKanribuFilter('open')">🔴 対応待ち</button>
+    <button class="kt-filter-btn" data-status="waiting" onclick="setKanribuFilter('waiting')">🟡 保留中</button>
+    <button class="kt-filter-btn" data-status="done" onclick="setKanribuFilter('done')">✅ 完了</button>
+    <button class="kt-filter-btn" data-status="all" onclick="setKanribuFilter('all')">全件</button>
+    <span id="kt-count" style="margin-left:auto;color:#666;align-self:center;font-size:0.9em;"></span>
+  </div>
+
+  <!-- タスクリスト -->
+  <div id="kt-list" style="display:flex;flex-direction:column;gap:10px;">
+    <p style="color:#999;text-align:center;padding:24px;">読み込み中...</p>
+  </div>
+</section>
+
 </main>
 
 <script>
@@ -718,10 +820,11 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
     document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
     btn.classList.add('active');
     var tab = btn.dataset.tab;
-    ['overview','tasks','checklists','reminders','attendance'].forEach(function(t) {
+    ['overview','tasks','checklists','reminders','attendance','kanribu_tasks'].forEach(function(t) {
       var el = document.getElementById('tab-' + t);
       el.classList.toggle('hidden', t !== tab);
     });
+    if (tab === 'kanribu_tasks') { initKanribuTasksTab(); }
   });
 });
 
@@ -1110,6 +1213,92 @@ document.getElementById('admin-add-btn').addEventListener('click', function() {
     resultEl.style.color = 'var(--sem-err-text)';
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// 管理部タスク確認タブ
+// ══════════════════════════════════════════════════════════════════
+var kanribuTasks = [];
+var ktFilter = 'active';
+var ktUnsubscribe = null;
+
+function initKanribuTasksTab() {
+  if (ktUnsubscribe) return; // 重複防止
+  ktUnsubscribe = db.collection('adx_kanribu_tasks')
+    .orderBy('createdAt', 'desc')
+    .limit(200)
+    .onSnapshot(function(snap) {
+      kanribuTasks = snap.docs.map(function(d) { return Object.assign({ id: d.id }, d.data()); });
+      renderKanribuTasks();
+    }, function(err) {
+      console.error('[KanribuTasks] onSnapshot失敗:', err);
+      document.getElementById('kt-list').innerHTML =
+        '<p style="color:red;text-align:center;padding:24px;">読み込みに失敗しました。</p>';
+    });
+}
+
+function setKanribuFilter(status) {
+  ktFilter = status;
+  document.querySelectorAll('.kt-filter-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.status === status);
+  });
+  renderKanribuTasks();
+}
+
+function renderKanribuTasks() {
+  var list = document.getElementById('kt-list');
+  var countEl = document.getElementById('kt-count');
+  if (!list) return;
+
+  var filtered = kanribuTasks;
+  if (ktFilter === 'active') {
+    filtered = kanribuTasks.filter(function(t) { return t.status === 'open' || t.status === 'waiting'; });
+  } else if (ktFilter !== 'all') {
+    filtered = kanribuTasks.filter(function(t) { return t.status === ktFilter; });
+  }
+
+  if (countEl) countEl.textContent = filtered.length + '件';
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<p style="color:#999;text-align:center;padding:24px;">タスクはありません。</p>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(function(task) {
+    var statusLabel = { open: '対応待ち', waiting: '保留中', done: '完了', cancelled: 'キャンセル' }[task.status] || task.status;
+    var dateStr = task.createdAt ? new Date(task.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    var completedStr = task.completedAt ? '完了: ' + new Date(task.completedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    var actionButtons = (task.status !== 'done' && task.status !== 'cancelled') ? (
+      '<div class="kt-actions">' +
+      (task.status !== 'done' ? '<button class="kt-btn kt-btn-done" onclick="updateKanribuStatus(\'' + task.id + '\',\'done\')">✅ 完了</button>' : '') +
+      (task.status === 'open' ? '<button class="kt-btn kt-btn-waiting" onclick="updateKanribuStatus(\'' + task.id + '\',\'waiting\')">🟡 保留</button>' : '') +
+      (task.status === 'waiting' ? '<button class="kt-btn kt-btn-open" onclick="updateKanribuStatus(\'' + task.id + '\',\'open\')">🔴 対応待ちに戻す</button>' : '') +
+      '</div>'
+    ) : '';
+    return '<div class="kt-card status-' + task.status + '">' +
+      '<div class="kt-card-header">' +
+        '<span class="kt-text">' + esc(task.messageText || '（本文なし）') + '</span>' +
+        '<span class="kt-status-badge ' + task.status + '">' + statusLabel + '</span>' +
+      '</div>' +
+      '<div class="kt-meta">' +
+        esc(task.channelName || '') +
+        (task.userName ? ' / ' + esc(task.userName) : '') +
+        (task.addedByName ? '　スタンプ: ' + esc(task.addedByName) : '') +
+        '　' + dateStr +
+        (completedStr ? '　' + completedStr : '') +
+        (task.slackLink ? '　<a class="kt-link" href="' + task.slackLink + '" target="_blank">Slackで開く↗</a>' : '') +
+      '</div>' +
+      actionButtons +
+      '</div>';
+  }).join('');
+}
+
+function updateKanribuStatus(docId, newStatus) {
+  var updateData = { status: newStatus };
+  if (newStatus === 'done') updateData.completedAt = new Date().toISOString();
+  db.collection('adx_kanribu_tasks').doc(docId).update(updateData).catch(function(e) {
+    alert('ステータス更新に失敗しました: ' + e.message);
+  });
+}
 
 </script>
 </body>
