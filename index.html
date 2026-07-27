@@ -397,6 +397,38 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
 .kt-btn-open:hover { background: #c62828; }
 .kt-link { font-size: 0.8em; color: #1a73e8; text-decoration: none; }
 .kt-link:hover { text-decoration: underline; }
+.kt-due-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.8em; color: #555; }
+.kt-due-row input[type="date"] { border: 1px solid #ddd; border-radius: 4px; padding: 3px 6px; font-size: 0.85em; font-family: inherit; }
+.kt-due-overdue { color: #c62828; font-weight: 700; }
+.kt-memo-row { margin-top: 8px; }
+.kt-memo-row textarea {
+  width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px;
+  padding: 6px 8px; font-size: 0.85em; font-family: inherit; resize: vertical; min-height: 32px;
+}
+.kt-memo-text { font-size: 0.85em; color: #555; background: #f8f9fa; border-radius: 4px; padding: 6px 8px; white-space: pre-wrap; word-break: break-all; }
+.kt-thread-btn { background: #fff; border: 1px solid #1a73e8; color: #1a73e8; }
+.kt-thread-btn:hover { background: #e8f0fe; }
+
+/* ── 管理部タスク スレッドモーダル ─────────────────────────── */
+#kt-thread-modal {
+  position: fixed; inset: 0; background: rgba(30,41,59,.5);
+  display: none; align-items: center; justify-content: center; z-index: 8000;
+}
+#kt-thread-modal.open { display: flex; }
+#kt-thread-inner {
+  background: var(--color-surface); border-radius: var(--radius-lg);
+  padding: var(--space-6); width: min(560px, 94vw);
+  box-shadow: 0 8px 32px rgba(0,0,0,.18); max-height: 82vh; overflow-y: auto;
+}
+#kt-thread-inner h3 { margin: 0 0 var(--space-4); font-size: var(--text-lg); }
+.kt-thread-msg { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 0.88em; }
+.kt-thread-msg:last-child { border-bottom: none; }
+.kt-thread-msg .kt-thread-msg-meta { color: #888; font-size: 0.85em; margin-bottom: 2px; }
+.kt-thread-msg .kt-thread-msg-text { color: #333; white-space: pre-wrap; word-break: break-word; }
+#kt-thread-close-btn {
+  border: 1px solid var(--color-border); background: none; border-radius: var(--radius-sm);
+  padding: 8px 16px; cursor: pointer; font-family: var(--font-family); margin-top: var(--space-4);
+}
 </style>
 </head>
 <body>
@@ -468,6 +500,17 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
     </ul>
     <div style="text-align:right;">
       <button id="help-close-btn">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 管理部タスク スレッド内容モーダル -->
+<div id="kt-thread-modal">
+  <div id="kt-thread-inner">
+    <h3>🧵 スレッド内容</h3>
+    <div id="kt-thread-body"><p style="color:#999;">読み込み中...</p></div>
+    <div style="text-align:right;">
+      <button id="kt-thread-close-btn">閉じる</button>
     </div>
   </div>
 </div>
@@ -674,6 +717,7 @@ td.task-note { color: var(--color-text-sub); max-width: 220px; word-break: break
     <button class="kt-filter-btn" data-status="waiting" onclick="setKanribuFilter('waiting')">🟡 保留中</button>
     <button class="kt-filter-btn" data-status="done" onclick="setKanribuFilter('done')">✅ 完了</button>
     <button class="kt-filter-btn" data-status="all" onclick="setKanribuFilter('all')">全件</button>
+    <button id="kt-sort-toggle" class="kt-filter-btn" onclick="toggleKanribuSort()">📅 期日順に並び替え</button>
     <span id="kt-count" style="margin-left:auto;color:#666;align-self:center;font-size:0.9em;"></span>
   </div>
 
@@ -1141,6 +1185,14 @@ document.getElementById('help-modal').addEventListener('click', function(e) {
   if (e.target === this) this.classList.remove('open');
 });
 
+/* ── 管理部タスク スレッドモーダル ────────────────────────── */
+document.getElementById('kt-thread-close-btn').addEventListener('click', function() {
+  document.getElementById('kt-thread-modal').classList.remove('open');
+});
+document.getElementById('kt-thread-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
+});
+
 /* ── 権限管理モーダル ─────────────────────────────────────── */
 document.getElementById('admin-btn').addEventListener('click', function() {
   document.getElementById('admin-modal').classList.add('open');
@@ -1219,6 +1271,7 @@ document.getElementById('admin-add-btn').addEventListener('click', function() {
 // ══════════════════════════════════════════════════════════════════
 var kanribuTasks = [];
 var ktFilter = 'active';
+var ktSortByDue = false;
 var ktUnsubscribe = null;
 
 function initKanribuTasksTab() {
@@ -1256,6 +1309,16 @@ function renderKanribuTasks() {
     filtered = kanribuTasks.filter(function(t) { return t.status === ktFilter; });
   }
 
+  filtered = filtered.slice();
+  if (ktSortByDue) {
+    filtered.sort(function(a, b) {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate < b.dueDate ? -1 : (a.dueDate > b.dueDate ? 1 : 0);
+    });
+  }
+
   if (countEl) countEl.textContent = filtered.length + '件';
 
   if (filtered.length === 0) {
@@ -1263,17 +1326,32 @@ function renderKanribuTasks() {
     return;
   }
 
+  var todayStr = new Date().toISOString().slice(0, 10);
+
   list.innerHTML = filtered.map(function(task) {
     var statusLabel = { open: '対応待ち', waiting: '保留中', done: '完了', cancelled: 'キャンセル' }[task.status] || task.status;
     var dateStr = task.createdAt ? new Date(task.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     var completedStr = task.completedAt ? '完了: ' + new Date(task.completedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    var actionButtons = (task.status !== 'done' && task.status !== 'cancelled') ? (
-      '<div class="kt-actions">' +
+    var canEdit = isEditor();
+    var isOverdue = !!(task.dueDate && task.status !== 'done' && task.status !== 'cancelled' && task.dueDate < todayStr);
+    var statusButtons = (task.status !== 'done' && task.status !== 'cancelled') ? (
       (task.status !== 'done' ? '<button class="kt-btn kt-btn-done" onclick="updateKanribuStatus(\'' + task.id + '\',\'done\')">✅ 完了</button>' : '') +
       (task.status === 'open' ? '<button class="kt-btn kt-btn-waiting" onclick="updateKanribuStatus(\'' + task.id + '\',\'waiting\')">🟡 保留</button>' : '') +
-      (task.status === 'waiting' ? '<button class="kt-btn kt-btn-open" onclick="updateKanribuStatus(\'' + task.id + '\',\'open\')">🔴 対応待ちに戻す</button>' : '') +
-      '</div>'
+      (task.status === 'waiting' ? '<button class="kt-btn kt-btn-open" onclick="updateKanribuStatus(\'' + task.id + '\',\'open\')">🔴 対応待ちに戻す</button>' : '')
     ) : '';
+    var threadButton = '<button class="kt-btn kt-thread-btn" onclick="openKanribuThreadModal(\'' + task.id + '\')">🧵 スレ内容</button>';
+    var dueRow = '<div class="kt-due-row">📅 期日: ' +
+      (canEdit
+        ? '<input type="date" value="' + (task.dueDate || '') + '" onchange="updateKanribuDue(\'' + task.id + '\', this.value)">'
+        : (task.dueDate ? esc(task.dueDate) : '未設定')) +
+      (isOverdue ? '<span class="kt-due-overdue"> ⚠期限超過</span>' : '') +
+      '</div>';
+    var memoRow = '<div class="kt-memo-row">' +
+      (canEdit
+        ? '<textarea id="kt-memo-' + task.id + '" placeholder="メモを入力...">' + esc(task.memo || '') + '</textarea>' +
+          '<div style="text-align:right;margin-top:4px;"><button class="kt-btn kt-btn-waiting" onclick="updateKanribuMemo(\'' + task.id + '\')">💾 メモ保存</button></div>'
+        : (task.memo ? '<div class="kt-memo-text">📝 ' + esc(task.memo) + '</div>' : '')) +
+      '</div>';
     return '<div class="kt-card status-' + task.status + '">' +
       '<div class="kt-card-header">' +
         '<span class="kt-text">' + esc(task.messageText || '（本文なし）') + '</span>' +
@@ -1287,9 +1365,18 @@ function renderKanribuTasks() {
         (completedStr ? '　' + completedStr : '') +
         (task.slackLink ? '　<a class="kt-link" href="' + task.slackLink + '" target="_blank">Slackで開く↗</a>' : '') +
       '</div>' +
-      actionButtons +
+      dueRow +
+      memoRow +
+      '<div class="kt-actions">' + statusButtons + threadButton + '</div>' +
       '</div>';
   }).join('');
+}
+
+function toggleKanribuSort() {
+  ktSortByDue = !ktSortByDue;
+  var btn = document.getElementById('kt-sort-toggle');
+  if (btn) btn.classList.toggle('active', ktSortByDue);
+  renderKanribuTasks();
 }
 
 function updateKanribuStatus(docId, newStatus) {
@@ -1298,6 +1385,46 @@ function updateKanribuStatus(docId, newStatus) {
   db.collection('adx_kanribu_tasks').doc(docId).update(updateData).catch(function(e) {
     alert('ステータス更新に失敗しました: ' + e.message);
   });
+}
+
+function updateKanribuDue(docId, value) {
+  db.collection('adx_kanribu_tasks').doc(docId).update({ dueDate: value || null }).then(function() {
+    showSnack('期日を更新しました');
+  }).catch(function(e) {
+    alert('期日の更新に失敗しました: ' + e.message);
+  });
+}
+
+function updateKanribuMemo(docId) {
+  var el = document.getElementById('kt-memo-' + docId);
+  if (!el) return;
+  db.collection('adx_kanribu_tasks').doc(docId).update({ memo: el.value }).then(function() {
+    showSnack('メモを保存しました');
+  }).catch(function(e) {
+    alert('メモの保存に失敗しました: ' + e.message);
+  });
+}
+
+function openKanribuThreadModal(docId) {
+  var task = kanribuTasks.find(function(t) { return t.id === docId; });
+  var body = document.getElementById('kt-thread-body');
+  if (!body) return;
+  if (!task) {
+    body.innerHTML = '<p style="color:#999;">タスクが見つかりません。</p>';
+  } else if (Array.isArray(task.threadMessages) && task.threadMessages.length > 0) {
+    body.innerHTML = task.threadMessages.map(function(m) {
+      var tStr = m.ts ? new Date(parseFloat(m.ts) * 1000).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      return '<div class="kt-thread-msg">' +
+        '<div class="kt-thread-msg-meta">' + esc(m.userName || m.user || '（不明）') + '　' + tStr + '</div>' +
+        '<div class="kt-thread-msg-text">' + esc(m.text || '') + '</div>' +
+        '</div>';
+    }).join('') +
+    (task.slackLink ? '<p style="margin-top:10px;"><a class="kt-link" href="' + task.slackLink + '" target="_blank">Slackで開く↗</a></p>' : '');
+  } else {
+    body.innerHTML = '<p style="color:#999;">スレッド内容はまだ保存されていません（backfill未実施、または返信のないメッセージです）。</p>' +
+      (task.slackLink ? '<p style="margin-top:10px;"><a class="kt-link" href="' + task.slackLink + '" target="_blank">Slackで開く↗</a></p>' : '');
+  }
+  document.getElementById('kt-thread-modal').classList.add('open');
 }
 
 </script>
