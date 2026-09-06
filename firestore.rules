@@ -1,0 +1,206 @@
+rules_version = '2';
+// Firestore セキュリティルール — wise-dev-ops プロジェクト
+// 設計書: docs/promotion_design.md §3-2
+// 取得元: Firebase Rules REST API（cloud.firestore release）2026-09-06実測取得・リポ管理化(H2週次セキュリティチェック)
+// 注意: このプロジェクト(wise-dev-ops)は複数アプリ共用（dashboard_data/catalogs/adx_*/pl_*/ai_org_health等）。
+//       このリポ(admin-dx-dashboard)が関与するのは adx_* コレクションのみ。デプロイ時は他アプリへの影響に注意。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isDirector() {
+      return request.auth != null
+          && request.auth.token.email == 'director@wise-jmco.com';
+    }
+    function hasRole() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role
+             in ['admin', 'viewer'];
+    }
+    function isAdmin() {
+      return isDirector()
+          || (request.auth != null
+              && exists(/databases/$(database)/documents/users/$(request.auth.token.email))
+              && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role
+                 == 'admin');
+    }
+
+    match /dashboard_data/{docId} {
+      allow read:  if isDirector() || hasRole();
+      allow write: if false;
+    }
+    match /catalogs/{docId} {
+      allow read:  if isDirector() || hasRole();
+      allow write: if false;
+    }
+    match /users/{email} {
+      allow read:  if isAdmin()
+                   || (request.auth != null && request.auth.token.email == email);
+      allow write: if isAdmin();
+    }
+    match /dashboard_instructions/{docId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.requestedBy == request.auth.token.email;
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+    match /approval_requests/{docId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.requestedBy == request.auth.token.email;
+      allow update: if false;
+      allow delete: if false;
+    }
+    match /chat_requests/{docId} {
+      allow read:   if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.requestedBy == request.auth.token.email;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── 管理部DXダッシュボード（admin-dx-dashboard） ───────────────────
+    function isAdxUser() {
+      return isDirector()
+          || (request.auth != null
+              && exists(/databases/$(database)/documents/adx_allowlist/$(request.auth.token.email)));
+    }
+    function isAdxEditor() {
+      return isDirector()
+          || (request.auth != null
+              && exists(/databases/$(database)/documents/adx_allowlist/$(request.auth.token.email))
+              && get(/databases/$(database)/documents/adx_allowlist/$(request.auth.token.email)).data.role
+                 in ['editor', 'admin']);
+    }
+    function isAdxAdmin() {
+      return isDirector()
+          || (request.auth != null
+              && exists(/databases/$(database)/documents/adx_allowlist/$(request.auth.token.email))
+              && get(/databases/$(database)/documents/adx_allowlist/$(request.auth.token.email)).data.role
+                 == 'admin');
+    }
+
+    // allowlist: 認証済みユーザーは自分の役割確認のため read 可。変更は adx admin のみ。
+    match /adx_allowlist/{email} {
+      allow read:  if request.auth != null;
+      allow write: if isAdxAdmin();
+    }
+    // タスク／マイルストーン／チェックリスト: allowlistユーザー閲覧・editor以上編集
+    match /adx_tasks/{docId} {
+      allow read:  if isAdxUser();
+      allow write: if isAdxEditor();
+    }
+    match /adx_milestones/{docId} {
+      allow read:  if isAdxUser();
+      allow write: if isAdxEditor();
+    }
+    match /adx_checklists/{docId} {
+      allow read:  if isAdxUser();
+      allow write: if isAdxEditor();
+    }
+    // 管理部タスク (adx_kanribu_tasks): allowlistユーザー閲覧・編集はeditor以上
+    // （7/22判断=isAdxEditor。7/23の許認可デプロイでソース未反映のまま巻き戻った経緯あり・2026-07-27再適用）
+    match /adx_kanribu_tasks/{docId} {
+      allow read:  if isAdxUser();
+      allow write: if isAdxEditor();
+    }
+    // 勤怠チェック結果（W3・Admin SDK が書込）: allowlistユーザー閲覧のみ
+    match /attendance_checks/{docId} {
+      allow read:  if isAdxUser();
+      allow write: if false;
+    }
+    match /attendance_checks_dryrun/{docId} {
+      allow read:  if isAdxAdmin();
+      allow write: if false;
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── AI組織ヘルスボード (ai_org_health) ────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // 読み取り: 認証済み allowlist ユーザーのみ（dashboard_dataと同条件を一言一句コピー）
+    // 書き込み: クライアントから不可（Admin SDK / Service Account が担う）
+    match /ai_org_health/{docId} {
+      allow read:  if isDirector() || hasRole();
+      allow write: if false;
+    }
+    match /ai_org_health_history/{docId} {
+      allow read:  if isDirector() || hasRole();
+      allow write: if false;
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── 薬局許認可管理ダッシュボード (pharmacy_license) ─────────────────
+    // 2026-07-22 追記。コレクション名は既存と衝突しないよう pl_ プレフィックスで統一。
+    // 権限モデル: meishi/pl_users（メールキー）方式を踏襲。director@は常時admin焼き込み。
+    // ══════════════════════════════════════════════════════════════════
+    function plEm() { return request.auth.token.email; }
+    function plIsSignedIn() { return request.auth != null; }
+    // 社内ドメイン限定（2026-08-06追加: auth!=nullだけだと社外のGoogleアカウントでも閲覧できてしまうため、
+    // 閲覧系はすべて @wise-jmco.com に限定。書込は従来どおりpl_users登録者+directorのみで不変）
+    function plIsInternal() {
+      return plIsSignedIn() && plEm().matches('.*@wise-jmco[.]com');
+    }
+    function plRoleOf() {
+      return exists(/databases/$(database)/documents/pl_users/$(plEm()))
+        ? get(/databases/$(database)/documents/pl_users/$(plEm())).data.role
+        : 'viewer';
+    }
+    // director@wise-jmco.com は常にadmin（オーナー固定・meishiパターン踏襲）
+    function plIsAdmin() {
+      return plIsSignedIn() && (plEm() == 'director@wise-jmco.com' || plRoleOf() == 'admin');
+    }
+    function plMyStoreId() {
+      return exists(/databases/$(database)/documents/pl_users/$(plEm()))
+        ? get(/databases/$(database)/documents/pl_users/$(plEm())).data.storeId
+        : null;
+    }
+    // 自店のみ編集可（editorロール かつ storeId一致）。adminは全店編集可。
+    function plIsEditorOfStore(storeId) {
+      return plIsAdmin()
+        || (plIsSignedIn() && plRoleOf() == 'editor' && plMyStoreId() == storeId);
+    }
+
+    // 店舗マスタ: 全員閲覧可・編集はadminのみ
+    match /pl_stores/{storeId} {
+      allow read:  if plIsInternal();
+      allow write: if plIsAdmin();
+    }
+    // 許認可種別マスタ: 全員閲覧可・編集はadminのみ
+    match /pl_license_types/{typeId} {
+      allow read:  if plIsInternal();
+      allow write: if plIsAdmin();
+    }
+    // 許認可レコード（店舗×種別）: 全員閲覧可・編集はadmin or 自店editor
+    match /pl_records/{recordId} {
+      allow read:   if plIsInternal();
+      allow update: if plIsAdmin() || plIsEditorOfStore(resource.data.storeId);
+      allow delete: if plIsAdmin();
+      allow create: if plIsAdmin() || plIsEditorOfStore(request.resource.data.storeId);
+
+      // 写真（Base64インライン格納。900KB超はクライアント側でスキップ＝photoSkipped:trueのみ保存）
+      match /photos/{photoId} {
+        allow read:  if plIsInternal();
+        allow write: if plIsAdmin()
+          || plIsEditorOfStore(get(/databases/$(database)/documents/pl_records/$(recordId)).data.storeId);
+      }
+      // 更新履歴（前回期限の記録）: create=admin or 自店editor／update・delete=adminのみ（改ざん防止のため締める）
+      match /history/{historyId} {
+        allow read:   if plIsInternal();
+        allow create: if plIsAdmin()
+          || plIsEditorOfStore(get(/databases/$(database)/documents/pl_records/$(recordId)).data.storeId);
+        allow update, delete: if plIsAdmin();
+      }
+    }
+    // 権限（メールキー・budget-tool/meishi標準踏襲）
+    // ・自分のドキュメントは読める（role確認のため）／admin は全件閲覧可
+    // ・未登録者は viewer として自己登録のみ可（全員閲覧可の要件）
+    // ・他人の追加・権限変更・削除は admin のみ
+    match /pl_users/{email} {
+      allow read:   if plIsInternal() && (plEm() == email || plIsAdmin());
+      allow create: if plIsInternal() && plEm() == email && request.resource.data.role == 'viewer';
+      allow create, update, delete: if plIsAdmin();
+    }
+
+  }
+}
